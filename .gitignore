@@ -1,0 +1,17 @@
+*.so
+build/
+log*/
+*.csv
+*.png
+"*.pdf"
+"*.svg"
+"*.eps"
+"*.jpg"
+"*.jpeg"
+"*.gif"
+"*.bmp"
+"*.tiff"
+"*.ico"
+"*.webp"
+*.pyc
+__pycache__/
