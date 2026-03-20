@@ -82,7 +82,7 @@ def compute_metrics(df: pd.DataFrame) -> pd.DataFrame:
         .nunique()
         .reset_index(name="kv_unique_cnt")
     )
-    valid_keys = kv_counts[kv_counts["kv_unique_cnt"] > 15][
+    valid_keys = kv_counts[kv_counts["kv_unique_cnt"] > 20][
         ["model_name", "batch_size", "input_len", "sm_clock"]
     ]
     df = df.merge(valid_keys, on=["model_name", "batch_size", "input_len", "sm_clock"])
