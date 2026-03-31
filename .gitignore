@@ -1,7 +1,5 @@
 *.so
 build/
-log*/
-*.csv
 *.png
 "*.pdf"
 "*.svg"
