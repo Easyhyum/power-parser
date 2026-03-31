@@ -882,16 +882,16 @@ COMBO_COLOR_THROUGHPUT = "#1565C0"
 COMBO_COLOR_POWER = "#C62828"
 COMBO_COLOR_ENERGY = "#424242"
 
-COMBO_NORM_YLIM = (0.3, 1.0)
+COMBO_NORM_YLIM = (0.3, 1.1)
 
 
-def _normalize_by_value_at_max_sm_clock(x: np.ndarray, y: np.ndarray) -> np.ndarray:
-    """각 metric별로 sm_clock이 최대인 점의 y를 1로 두는 비율."""
-    x = np.asarray(x, dtype=float)
+def _normalize_by_value_at_max_target_sm_clock(x_target: np.ndarray, y: np.ndarray) -> np.ndarray:
+    """각 metric별로 target_sm_clock이 최대인 그룹의 y를 1로 두는 비율."""
+    x_target = np.asarray(x_target, dtype=float)
     y = np.asarray(y, dtype=float)
-    if x.size == 0:
+    if x_target.size == 0:
         return y
-    j = int(np.nanargmax(x))
+    j = int(np.nanargmax(x_target))
     ref = float(y[j])
     if not math.isfinite(ref) or ref == 0:
         return np.full_like(y, np.nan, dtype=float)
@@ -914,17 +914,30 @@ def _annotate_line_points(ax, x: np.ndarray, y: np.ndarray, fmt: str) -> None:
         )
 
 
+def _combo_panel_has_phase_component_rows(
+    metrics: pd.DataFrame, phase: str, component: str | None
+) -> bool:
+    """콤보 그리드용: 해당 phase(및 선택 시 attn/mlp)에 target/sm_clock 유효 행이 있는지."""
+    work = metrics.copy()
+    work["_phase"] = work["model_name"].map(_line_infer_phase)
+    work = work[work["_phase"] == phase]
+    if component is not None:
+        work = work[work["model_name"].map(_line_infer_component) == component]
+    return not work.dropna(subset=["target_sm_clock", "sm_clock"]).empty
+
+
 def _plot_sm_clock_throughput_avg_power_grid(
     metrics: pd.DataFrame,
     line_dir: Path,
     line_sm_clock_xmax: float,
 ) -> None:
     """
-    x = sm_clock. y: throughput(파랑), power(빨강), energy/token(회색), 3축.
-    서브플롯 = (batch_size, input_len). phase별로 raw / normalized PNG 각각 저장.
-    normalized: metric마다 sm_clock 최대점=1로 나눔, 세 y축 ylim (0.3, 1.0) 통일.
+    x = 그룹별 평균 sm_clock (그룹 키는 target_sm_clock). y: throughput / power / EPT, 3축.
+    서브플롯 = (batch_size, input_len). phase(prefill/decoding)별 raw·norm PNG.
+    attn·mlp가 데이터에 둘 다 있으면 phase별 전체 합산 + _attn + _mlp PNG(각 raw·norm).
+    normalized: metric마다 target_sm_clock 최대 그룹의 값=1로 나눔, ylim (0.3, 1.1) 통일.
     """
-    need = {"batch_size", "input_len", "sm_clock", "model_name", TP_COL, PWR_COL, EPT_COL}
+    need = {"batch_size", "input_len", "target_sm_clock", "sm_clock", "model_name", TP_COL, PWR_COL, EPT_COL}
     if not need <= set(metrics.columns):
         print("  (line combo) 스킵: 필요한 컬럼이 없습니다.")
         return
@@ -941,134 +954,167 @@ def _plot_sm_clock_throughput_avg_power_grid(
     fig_h = 3.4 * nrows + 1.2
     line_dir.mkdir(parents=True, exist_ok=True)
 
+    split_am = _should_split_attn_mlp(metrics)
+
     for phase in ("prefill", "decoding"):
-        for normalized in (False, True):
-            fig, axes = plt.subplots(nrows, ncols, figsize=(fig_w, fig_h), squeeze=False)
-            ax_flat = axes.ravel()
+        variants: list[tuple[str | None, str]] = [(None, "")]
+        if split_am:
+            if _combo_panel_has_phase_component_rows(metrics, phase, "attn"):
+                variants.append(("attn", "_attn"))
+            if _combo_panel_has_phase_component_rows(metrics, phase, "mlp"):
+                variants.append(("mlp", "_mlp"))
 
-            for idx, (bs, il) in enumerate(pairs):
-                ax = ax_flat[idx]
-                sub = metrics[(metrics["batch_size"] == bs) & (metrics["input_len"] == il)]
-                if sub.empty:
-                    ax.set_visible(False)
-                    continue
-                work = sub.copy()
-                work["_phase"] = work["model_name"].map(_line_infer_phase)
-                work = work[work["_phase"] == phase].copy()
-                if work.empty:
-                    ax.text(
-                        0.5, 0.5, f"No {phase} data", ha="center", va="center",
-                        transform=ax.transAxes,
+        for component, comp_suffix in variants:
+            for normalized in (False, True):
+                fig, axes = plt.subplots(nrows, ncols, figsize=(fig_w, fig_h), squeeze=False)
+                ax_flat = axes.ravel()
+
+                for idx, (bs, il) in enumerate(pairs):
+                    ax = ax_flat[idx]
+                    sub = metrics[(metrics["batch_size"] == bs) & (metrics["input_len"] == il)]
+                    if sub.empty:
+                        ax.set_visible(False)
+                        continue
+                    work = sub.copy()
+                    work["_phase"] = work["model_name"].map(_line_infer_phase)
+                    work = work[work["_phase"] == phase].copy()
+                    if component is not None:
+                        work = work[work["model_name"].map(_line_infer_component) == component].copy()
+                    if work.empty:
+                        msg = f"No {phase} data" if component is None else f"No {phase} · {component}"
+                        ax.text(
+                            0.5, 0.5, msg, ha="center", va="center",
+                            transform=ax.transAxes,
+                        )
+                        ax.set_xlim(0, line_sm_clock_xmax)
+                        continue
+                    w = work.dropna(subset=["target_sm_clock", "sm_clock"])
+                    if w.empty:
+                        ax.text(
+                            0.5, 0.5, "No target/sm_clock data", ha="center", va="center",
+                            transform=ax.transAxes,
+                        )
+                        ax.set_xlim(0, line_sm_clock_xmax)
+                        continue
+                    g = (
+                        w.groupby("target_sm_clock", as_index=False)
+                        .agg(
+                            {
+                                TP_COL: "mean",
+                                PWR_COL: "mean",
+                                EPT_COL: "mean",
+                                "sm_clock": "mean",
+                            }
+                        )
+                        .sort_values("target_sm_clock")
                     )
-                    ax.set_xlim(0, line_sm_clock_xmax)
-                    continue
-                g = (
-                    work.groupby("sm_clock", as_index=False)
-                    .agg({TP_COL: "mean", PWR_COL: "mean", EPT_COL: "mean"})
-                    .sort_values("sm_clock")
-                )
-                if g.empty:
-                    ax.text(0.5, 0.5, "No data", ha="center", va="center", transform=ax.transAxes)
-                    ax.set_xlim(0, line_sm_clock_xmax)
-                    continue
+                    if g.empty:
+                        ax.text(0.5, 0.5, "No data", ha="center", va="center", transform=ax.transAxes)
+                        ax.set_xlim(0, line_sm_clock_xmax)
+                        continue
 
-                ax2 = ax.twinx()
-                ax3 = ax.twinx()
-                ax3.spines["right"].set_position(("outward", 44))
-                ax3.patch.set_visible(False)
-                for sp in ("top", "left", "bottom"):
-                    ax3.spines[sp].set_visible(False)
+                    ax2 = ax.twinx()
+                    ax3 = ax.twinx()
+                    ax3.spines["right"].set_position(("outward", 44))
+                    ax3.patch.set_visible(False)
+                    for sp in ("top", "left", "bottom"):
+                        ax3.spines[sp].set_visible(False)
 
-                x = g["sm_clock"].values.astype(float)
-                y_tp = g[TP_COL].values.astype(float)
-                y_pw = g[PWR_COL].values.astype(float)
-                y_ept = g[EPT_COL].values.astype(float)
-                if normalized:
-                    y_tp = _normalize_by_value_at_max_sm_clock(x, y_tp)
-                    y_pw = _normalize_by_value_at_max_sm_clock(x, y_pw)
-                    y_ept = _normalize_by_value_at_max_sm_clock(x, y_ept)
+                    x = g["sm_clock"].values.astype(float)
+                    x_tgt = g["target_sm_clock"].values.astype(float)
+                    y_tp = g[TP_COL].values.astype(float)
+                    y_pw = g[PWR_COL].values.astype(float)
+                    y_ept = g[EPT_COL].values.astype(float)
+                    if normalized:
+                        y_tp = _normalize_by_value_at_max_target_sm_clock(x_tgt, y_tp)
+                        y_pw = _normalize_by_value_at_max_target_sm_clock(x_tgt, y_pw)
+                        y_ept = _normalize_by_value_at_max_target_sm_clock(x_tgt, y_ept)
 
-                (ln_tp,) = ax.plot(
-                    x, y_tp, marker="o", markersize=3, linewidth=1.5,
-                    color=COMBO_COLOR_THROUGHPUT, label="throughput",
-                )
-                (ln_pw,) = ax2.plot(
-                    x, y_pw, marker="s", markersize=3, linewidth=1.5,
-                    color=COMBO_COLOR_POWER, linestyle="--", label="avg power (W)",
-                )
-                (ln_ept,) = ax3.plot(
-                    x, y_ept, marker="^", markersize=3, linewidth=1.5,
-                    color=COMBO_COLOR_ENERGY, linestyle=":", label="energy/token (J)",
-                )
-
-                if not normalized:
-                    _annotate_line_points(ax, x, y_tp, ".4g")
-                    _annotate_line_points(ax2, x, y_pw, ".3f")
-                    _annotate_line_points(ax3, x, y_ept, ".4g")
-
-                ax.set_xlabel("SM clock (MHz)", fontweight="bold", fontsize=8)
-                if normalized:
-                    ax.set_ylabel(
-                        "Normalized ratio (max SM=1/metric, y: 0.3-1.0)",
-                        fontweight="bold",
-                        fontsize=8,
+                    (ln_tp,) = ax.plot(
+                        x, y_tp, marker="o", markersize=3, linewidth=1.5,
+                        color=COMBO_COLOR_THROUGHPUT, label="throughput",
                     )
-                    ax2.set_ylabel("")
-                    ax3.set_ylabel("")
-                else:
-                    ax.set_ylabel("Throughput (tokens/s)", fontweight="bold", fontsize=8)
-                    ax2.set_ylabel("Avg power (W, power-based)", fontweight="bold", fontsize=8)
-                    ax3.set_ylabel("Energy/token (J, power-based)", fontweight="bold", fontsize=8)
-                ax.set_title(f"batch_size={bs}, input_len={il}", fontsize=9, fontweight="bold")
-                ax.set_xlim(0, line_sm_clock_xmax)
-                if normalized:
-                    lo, hi = COMBO_NORM_YLIM
-                    ax.set_ylim(lo, hi)
-                    ax2.set_ylim(lo, hi)
-                    ax3.set_ylim(lo, hi)
-                ax.grid(True, alpha=0.3)
-                ax.tick_params(axis="both", labelsize=7)
-                ax2.tick_params(axis="y", labelsize=7)
-                ax3.tick_params(axis="y", labelsize=7)
-                if normalized:
-                    ax2.tick_params(axis="y", labelright=False)
-                    ax3.tick_params(axis="y", labelright=False)
-                for lb in list(ax.get_xticklabels()) + list(ax.get_yticklabels()):
-                    lb.set_fontweight("bold")
-                if not normalized:
-                    for lb in ax2.get_yticklabels():
+                    (ln_pw,) = ax2.plot(
+                        x, y_pw, marker="s", markersize=3, linewidth=1.5,
+                        color=COMBO_COLOR_POWER, linestyle="--", label="avg power (W)",
+                    )
+                    (ln_ept,) = ax3.plot(
+                        x, y_ept, marker="^", markersize=3, linewidth=1.5,
+                        color=COMBO_COLOR_ENERGY, linestyle=":", label="energy/token (J)",
+                    )
+
+                    if normalized:
+                        _annotate_line_points(ax, x, y_tp, ".3f")
+                        _annotate_line_points(ax2, x, y_pw, ".3f")
+                        _annotate_line_points(ax3, x, y_ept, ".3f")
+                    else:
+                        _annotate_line_points(ax, x, y_tp, ".4g")
+                        _annotate_line_points(ax2, x, y_pw, ".3f")
+                        _annotate_line_points(ax3, x, y_ept, ".4g")
+
+                    ax.set_xlabel("SM clock (MHz)", fontweight="bold", fontsize=8)
+                    if normalized:
+                        ax.set_ylabel("Normalized Ratio", fontweight="bold", fontsize=8)
+                        ax2.set_ylabel("")
+                        ax3.set_ylabel("")
+                    else:
+                        ax.set_ylabel("Throughput (tokens/s)", fontweight="bold", fontsize=8)
+                        ax2.set_ylabel("Avg power (W, power-based)", fontweight="bold", fontsize=8)
+                        ax3.set_ylabel("Energy/token (J, power-based)", fontweight="bold", fontsize=8)
+                    ax.set_title(f"batch_size={bs}, input_len={il}", fontsize=9, fontweight="bold")
+                    ax.set_xlim(0, line_sm_clock_xmax)
+                    if normalized:
+                        lo, hi = COMBO_NORM_YLIM
+                        ax.set_ylim(lo, hi)
+                        ax2.set_ylim(lo, hi)
+                        ax3.set_ylim(lo, hi)
+                    ax.grid(True, alpha=0.3)
+                    ax.tick_params(axis="both", labelsize=7)
+                    ax2.tick_params(axis="y", labelsize=7)
+                    ax3.tick_params(axis="y", labelsize=7)
+                    if normalized:
+                        ax2.tick_params(axis="y", labelright=False)
+                        ax3.tick_params(axis="y", labelright=False)
+                    for lb in list(ax.get_xticklabels()) + list(ax.get_yticklabels()):
                         lb.set_fontweight("bold")
-                    for lb in ax3.get_yticklabels():
-                        lb.set_fontweight("bold")
-                ax.legend(
-                    [ln_tp, ln_pw, ln_ept],
-                    ["throughput", "avg power (W)", "energy/token (J)"],
-                    fontsize=5,
-                    loc="best",
-                    ncol=1,
+                    if not normalized:
+                        for lb in ax2.get_yticklabels():
+                            lb.set_fontweight("bold")
+                        for lb in ax3.get_yticklabels():
+                            lb.set_fontweight("bold")
+                    ax.legend(
+                        [ln_tp, ln_pw, ln_ept],
+                        ["throughput", "avg power (W)", "energy/token (J)"],
+                        fontsize=5,
+                        loc="upper left",
+                        ncol=1,
+                    )
+
+                for j in range(len(pairs), len(ax_flat)):
+                    ax_flat[j].set_visible(False)
+
+                comp_part = f" · {component}" if component else ""
+                norm_note = (
+                    " [normalized, max target SM=1/metric, y 0.3-1.1]"
+                    if normalized
+                    else " [raw values]"
                 )
-
-            for j in range(len(pairs), len(ax_flat)):
-                ax_flat[j].set_visible(False)
-
-            norm_note = (
-                " [normalized, max SM=1/metric, y shared 0.3-1.0]"
-                if normalized
-                else " [raw values]"
-            )
-            fig.suptitle(
-                f"Throughput, avg power, energy/token vs SM clock — {phase}{norm_note}  "
-                f"(panels: batch_size × input_len)",
-                fontsize=11,
-                fontweight="bold",
-                y=1.0,
-            )
-            fig.tight_layout()
-            suffix = "_norm" if normalized else ""
-            fname = f"line_throughput_and_avg_power_W_vs_sm_clock_bs_il_{phase}{suffix}.png"
-            fig.savefig(line_dir / fname, dpi=150, bbox_inches="tight")
-            plt.close(fig)
-            print(f"  저장 (line): {line_dir / fname}")
+                fig.suptitle(
+                    f"Throughput, avg power, energy/token vs SM clock — {phase}{comp_part}{norm_note}  "
+                    f"(panels: batch_size × input_len)",
+                    fontsize=11,
+                    fontweight="bold",
+                    y=1.0,
+                )
+                fig.tight_layout()
+                suffix = "_norm" if normalized else ""
+                fname = (
+                    f"line_throughput_and_avg_power_W_vs_sm_clock_bs_il_{phase}"
+                    f"{comp_suffix}{suffix}.png"
+                )
+                fig.savefig(line_dir / fname, dpi=150, bbox_inches="tight")
+                plt.close(fig)
+                print(f"  저장 (line): {line_dir / fname}")
 
 
 def plot_line_charts(
@@ -1080,9 +1126,8 @@ def plot_line_charts(
     (1) x = sm_clock 선형 y, (2) x = memory_util_pct 선형 y,
     (3) x = sm_clock log y (_ylog), (4) x = memory log y (_xmem_ylog),
     (5) x = input_len (_xin / _xin_ylog), (6) x = batch_size 전 배치 한 figure (_xbs / _xbs_ylog),
-    (7) x = sm_clock, 3축(진한 파랑/빨강/회색), 패널=batch×input_len.
-        raw(값+마커 수치)와 norm(최대 SM=1/메트릭, y축 세 축 공통 0.3-1.0) phase별 분리 저장:
-        …_prefill.png, …_decoding.png, …_prefill_norm.png, …_decoding_norm.png.
+    (7) x=target 그룹의 평균 sm_clock, 3축, 패널=batch×input_len. phase(prefill/decoding)별 raw·norm.
+        attn·mlp 동시 존재 시 …_{phase}_attn*, …_{phase}_mlp* 추가(해당 phase에 행 있을 때만).
     sm_clock x축은 xlim (0, line_sm_clock_xmax) 로 figure 내 패널 통일.
     attn·mlp 동시 존재 시 2×2: 행=prefill/decoding, 열=attn/mlp. 아니면 1×2 prefill|decoding.
     패널별 독립 y축.

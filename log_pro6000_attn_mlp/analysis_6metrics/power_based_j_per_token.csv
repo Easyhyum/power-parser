@@ -1,0 +1,5 @@
+cudagraph_mode,batch_size,target_sm_clock,input_len,model_name,power_based_j_per_token
+NONE,16,330,8192,Qwen/Qwen3-8B_prefill-attn,87.95862791200118
+FULL,16,330,8192,Qwen/Qwen3-8B_decoding-attn,0.40259329746165295
+NONE,16,630,8192,Qwen/Qwen3-8B_prefill-attn,67.84901566458332
+FULL,16,630,8192,Qwen/Qwen3-8B_decoding-attn,0.31450855080937506
