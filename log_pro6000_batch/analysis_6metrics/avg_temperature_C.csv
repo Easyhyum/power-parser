@@ -1,0 +1,9 @@
+cudagraph_mode,batch_size,target_sm_clock,input_len,model_name,avg_temperature_C
+NONE,16,2430,8192,Qwen/Qwen3-8B_prefill-all_default,62.37347670250896
+FULL,16,2430,8192,Qwen/Qwen3-8B_decoding-all_default,53.21604938271606
+NONE,16,2430,8192,Qwen/Qwen3-8B_prefill-all_ascending,67.90794917257683
+FULL,16,2430,8192,Qwen/Qwen3-8B_decoding-all_ascending,54.63641975308642
+NONE,16,2430,8192,Qwen/Qwen3-8B_prefill-all_descending,67.61110983923483
+FULL,16,2430,8192,Qwen/Qwen3-8B_decoding-all_descending,54.47667949334617
+NONE,16,2430,8192,Qwen/Qwen3-8B_prefill-all_even,68.20227541371158
+FULL,16,2430,8192,Qwen/Qwen3-8B_decoding-all_even,55.032613168724275

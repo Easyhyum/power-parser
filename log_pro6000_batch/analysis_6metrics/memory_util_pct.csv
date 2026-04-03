@@ -1,0 +1,9 @@
+cudagraph_mode,batch_size,target_sm_clock,input_len,model_name,memory_util_pct
+NONE,16,2430,8192,Qwen/Qwen3-8B_prefill-all_default,23.921146953405017
+FULL,16,2430,8192,Qwen/Qwen3-8B_decoding-all_default,89.0
+NONE,16,2430,8192,Qwen/Qwen3-8B_prefill-all_ascending,23.77098108747045
+FULL,16,2430,8192,Qwen/Qwen3-8B_decoding-all_ascending,88.0385802469136
+NONE,16,2430,8192,Qwen/Qwen3-8B_prefill-all_descending,23.793433302808307
+FULL,16,2430,8192,Qwen/Qwen3-8B_decoding-all_descending,87.80679814013146
+NONE,16,2430,8192,Qwen/Qwen3-8B_prefill-all_even,23.671099290780145
+FULL,16,2430,8192,Qwen/Qwen3-8B_decoding-all_even,88.0

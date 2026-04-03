@@ -1,0 +1,11 @@
+cudagraph_mode,batch_size,target_sm_clock,input_len,model_name,avg_temperature_C
+NONE,8,2430,16384,nvidia/Qwen3-8B-NVFP4_prefill-all,61.61904761904762
+FULL,8,2430,16384,nvidia/Qwen3-8B-NVFP4_decoding-all,53.45117845117846
+NONE,8,2430,16384,nvidia/Qwen3-8B-FP8_prefill-all,65.92358974358974
+FULL,8,2430,16384,nvidia/Qwen3-8B-FP8_decoding-all,56.676767676767675
+NONE,8,2430,16384,JunHowie/Qwen3-8B-GPTQ-Int8_prefill-all,70.16727642276423
+FULL,8,2430,16384,JunHowie/Qwen3-8B-GPTQ-Int8_decoding-all,58.73703703703704
+NONE,8,2430,16384,JunHowie/Qwen3-8B-GPTQ-Int4_prefill-all,69.90990990990991
+FULL,8,2430,16384,JunHowie/Qwen3-8B-GPTQ-Int4_decoding-all,59.02057613168725
+NONE,8,2430,16384,Qwen/Qwen3-8B_prefill-all,68.48148148148147
+FULL,8,2430,16384,Qwen/Qwen3-8B_decoding-all,58.1358024691358

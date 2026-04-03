@@ -96,7 +96,7 @@ FULL,16,1230,4096,Qwen/Qwen3-8B_decoding-mlp,100.0
 NONE,16,930,4096,Qwen/Qwen3-8B_prefill-mlp,100.0
 FULL,16,930,4096,Qwen/Qwen3-8B_decoding-mlp,100.0
 NONE,16,2430,2048,Qwen/Qwen3-8B_prefill-mlp,100.0
-FULL,16,2430,2048,Qwen/Qwen3-8B_decoding-mlp,99.73958333333333
+FULL,16,2430,2048,Qwen/Qwen3-8B_decoding-mlp,100.0
 NONE,16,2130,2048,Qwen/Qwen3-8B_prefill-mlp,100.0
 FULL,16,2130,2048,Qwen/Qwen3-8B_decoding-mlp,100.0
 NONE,16,1830,2048,Qwen/Qwen3-8B_prefill-mlp,100.0

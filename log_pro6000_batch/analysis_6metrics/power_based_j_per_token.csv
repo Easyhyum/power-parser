@@ -1,0 +1,9 @@
+cudagraph_mode,batch_size,target_sm_clock,input_len,model_name,power_based_j_per_token
+NONE,16,2430,8192,Qwen/Qwen3-8B_prefill-all_default,0.02828082427641236
+FULL,16,2430,8192,Qwen/Qwen3-8B_decoding-all_default,0.5546158944149305
+NONE,16,2430,8192,Qwen/Qwen3-8B_prefill-all_ascending,0.0284681720912744
+FULL,16,2430,8192,Qwen/Qwen3-8B_decoding-all_ascending,0.4811307094979038
+NONE,16,2430,8192,Qwen/Qwen3-8B_prefill-all_descending,0.02847220698201026
+FULL,16,2430,8192,Qwen/Qwen3-8B_decoding-all_descending,0.4795204722885735
+NONE,16,2430,8192,Qwen/Qwen3-8B_prefill-all_even,0.028521162529314553
+FULL,16,2430,8192,Qwen/Qwen3-8B_decoding-all_even,0.4819610707022183
